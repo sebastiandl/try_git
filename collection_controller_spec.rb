@@ -35,3 +35,6 @@ RSpec.describe CollectionController, type: :controller do
     end
   end
 end
+
+
+# add line here
