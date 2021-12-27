@@ -1,0 +1,73 @@
+env:
+  NARVAR_URL: https://ws-st01.narvar.qa/api/v1
+  RAKE_TASK: features
+
+name: Test Validations
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+    branches-ignore:
+      - master
+jobs:
+  aws-environment:
+    name: AWS Environment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      - name: Run CodeBuild
+        uses: aws-actions/aws-codebuild-run-build@v1.0.3
+        with:
+          project-name: develop-mejuri-web-backend
+
+  cucumber-tests:
+    name: Cucumber Tests
+    needs: aws-environment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract branch name
+        shell: bash
+        run: |
+          echo "GITHUB_HEAD_REF = $GITHUB_HEAD_REF"
+          tmp_json="$(echo '"'$GITHUB_HEAD_REF'"' | jq 'capture("(?<a>[a-z]+)-(?<n>[0-9]+)")')"
+          project="$(echo "$tmp_json" | jq '.a')"
+          number="$(echo "$tmp_json" | jq '.n')"
+          if [ ! -z "$project" ] && [ ! -z "$number" ]; then
+            ticket="$(echo "$project-$number" | tr -d '"')"
+            echo "::set-output name=host::$(echo http://$ticket.mejuri.com)"
+          else
+            exit 1
+          fi
+        id: branch-name
+      - name: Checkout Cucumber Repo
+        uses: actions/checkout@v2
+        with:
+          repository: mejuri-inc/mejuri-spec-cuckes
+          ref: master
+          token: ${{ secrets.PRIVATE_REPO_ACCESS_TOKEN }}
+      - name: Run Cucumber Tests
+        uses: ./
+        with:
+          host: ${{ steps.branch-name.outputs.host }}
+          rake_task: ${{ env.RAKE_TASK }}
+          narvar_api_basic_auth_username: ${{ secrets.NARVAR_API_BASIC_AUTH_USERNAME }}
+          narvar_api_basic_auth_password: ${{ secrets.NARVAR_API_BASIC_AUTH_PASSWORD }}
+          narvar_notification_basic_auth_username: ${{ secrets.NARVAR_NOTIFICATION_BASIC_AUTH_USERNAME }}
+          narvar_notification_basic_auth_password: ${{ secrets.NARVAR_NOTIFICATION_BASIC_AUTH_PASSWORD }}
+          narvar_url: ${{ env.NARVAR_URL }}
+          bot_spree_username: ${{ secrets.BOT_SPREE_USERNAME }}
+          bot_spree_password: ${{ secrets.BOT_SPREE_PASSWORD }}
+          x_spree_token: ${{ secrets.X_SPREE_TOKEN }}
+          x_mejuri_cuke_proxy: ${{ secrets.X_MEJURI_CUKE_PROXY }}
+          x_mejuri_cuke_proxy_host: ${{ secrets.X_MEJURI_CUKE_PROXY_HOST }}
+          x_mejuri_cuke_proxy_port: ${{ secrets.X_MEJURI_CUKE_PROXY_PORT }}
+          x_stripe_us_test_token: ${{ secrets.X_STRIPE_US_TEST_TOKEN }}
+          x_stripe_ca_test_token: ${{ secrets.X_STRIPE_CA_TEST_TOKEN }}
